@@ -1,0 +1,18 @@
+# Map MoViNet (or heuristic) outputs → AgentJetson Level-2 labels.
+# Align with scene-router taxonomy.
+
+version: "0.1"
+
+# Example mapping once a real MoViNet label set is known:
+# kinetics_style:
+#   "driving car": driving
+#   "waiting in line": stopped
+#   ...
+
+level2_targets:
+  - driving
+  - stopped
+  - traffic_stop
+  - accident
+  - obstruction
+  - parked
