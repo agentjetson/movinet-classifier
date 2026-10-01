@@ -41,7 +41,7 @@ Keeps RF-DETR completely downstream. Does not emit ObjectEnvelopes.
 
 | Direction | Message            | Subject / notes              |
 |-----------|--------------------|-------------------------------|
-| In        | frame window / clip| local queue or `cv.scene.temporal.request` |
+| In        | frame window / clip| local queue, `--network-path` FrameService, or `cv.scene.temporal.request` |
 | Out       | refined SceneResult| `cv.scene.temporal` / `cv.scene.result`    |
 
 Re-uses the same hierarchical Level-1 / Level-2 taxonomy as scene-router (`config/taxonomy.yaml` aligned).
@@ -63,11 +63,17 @@ export MOVINET_MODEL=models/movinet_a0.onnx
 export CLIP_FRAMES=16
 export CLIP_FPS=5
 export NATS_URL=nats://localhost:4222
+# network-path:
+export FRAME_GRPC_ADDR=localhost:50060
+export FRAME_CAMERA_ID=          # optional filter
+export FRAME_ENCODING=jpeg       # or raw_bgr
 ```
 
 ---
 
 ## Build
+
+Requires: CMake ≥ 3.20, OpenCV, protobuf + gRPC, (optional) ONNX Runtime.
 
 ```bash
 export ONNXRUNTIME_ROOT=/path/to/onnxruntime
@@ -86,19 +92,36 @@ ORT_DEVICE=gpu ./build/temporal_classifier --source sample.mp4
 # Rolling window from webcam
 ./build/temporal_classifier --source 0
 
+# Network path: subscribe to camera-connector FrameService (gRPC)
+ORT_DEVICE=gpu \
+./build/temporal_classifier --network-path localhost:50060 models/movinet_a0.onnx
+
+# Same with env defaults
+FRAME_GRPC_ADDR=localhost:50060 FRAME_ENCODING=jpeg \
+./build/temporal_classifier --network-path "" models/movinet_a0.onnx
+
 # Future: subscribe to temporal_requested side-channel from scene-router
 NATS_URL=nats://localhost:4222 ./build/temporal_classifier --nats
 ```
+
+### Modes
+
+| Mode | Description |
+|------|-------------|
+| `--source <path\|device>` | Open `VideoCapture` inside the binary (demo / offline) |
+| `--network-path <frame_grpc_addr>` | Client of camera-connector `FrameService.Subscribe` (same contract as object-classifier) |
+
+`--network-path` samples the live stream at ~`CLIP_FPS` into the MoViNet rolling window and reconnects if the stream ends.
 
 ---
 
 ## Design principles
 
-1. **Temporal concepts are temporal.** Do not force them into single-frame embeddings.
-2. **Only run when needed.** scene-router sets `temporal_requested`; this component stays idle otherwise.
-3. **Same taxonomy.** Refined Level-2 must map to the same specialist attachment table.
-4. **Edge-first.** MoViNet-A0/A1 keep latency acceptable on Jetson-class hardware.
-5. **Composable.** New temporal models swap under the same ONNX interface.
+1. **Temporal only when needed.** Run only when scene-router sets `temporal_requested`.
+2. **Same taxonomy.** Refined Level-2 must map to the same specialist attachment table.
+3. **Edge-first.** MoViNet-A0/A1 keep latency acceptable on Jetson-class hardware.
+4. **Composable.** New temporal models swap under the same ONNX interface.
+5. **Same frame path as object-classifier.** `--network-path` uses the shared `capture.v1.FrameService` contract.
 
 ---
 
