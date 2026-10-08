@@ -39,8 +39,19 @@ if(NOT spdlog_FOUND)
   FetchContent_MakeAvailable(spdlog)
 endif()
 
+# yaml-cpp for contract taxonomy
+find_package(yaml-cpp QUIET)
+if(NOT yaml-cpp_FOUND)
+  FetchContent_Declare(yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG 0.8.0 GIT_SHALLOW TRUE)
+  set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(yaml-cpp)
+endif()
+
 # ---------------------------------------------------------------------------
-# gRPC / protobuf (same pattern as object-classifier)
+# gRPC / protobuf
 # ---------------------------------------------------------------------------
 set(_use_grpc_config FALSE)
 if(NOT APPLE)
@@ -83,7 +94,6 @@ if(NOT DEFINED _PROTOBUF_PROTOC)
   endif()
 endif()
 
-# Only pass a proto_path that actually contains google/protobuf/*.proto
 set(_PROTO_INCLUDE_PATH "")
 if(DEFINED Protobuf_INCLUDE_DIRS)
   foreach(_inc ${Protobuf_INCLUDE_DIRS})
@@ -104,13 +114,7 @@ if(NOT _PROTO_INCLUDE_PATH)
     endif()
   endforeach()
 endif()
-if(_PROTO_INCLUDE_PATH)
-  message(STATUS "protobuf well-known types: ${_PROTO_INCLUDE_PATH}")
-endif()
 
-# ---------------------------------------------------------------------------
-# Protos — FrameService client + IngestScene publisher
-# ---------------------------------------------------------------------------
 set(PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/proto)
 set(PROTO_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
@@ -165,14 +169,13 @@ target_include_directories(temporal_proto PUBLIC
 )
 target_link_libraries(temporal_proto PUBLIC protobuf::libprotobuf ${_GRPC_GRPCPP})
 
-# ---------------------------------------------------------------------------
-# Binary
-# ---------------------------------------------------------------------------
 add_executable(temporal_classifier
   src/main.cpp
   src/common/env.hpp
   src/temporal/movinet.cpp
   src/temporal/movinet.hpp
+  src/temporal/taxonomy.cpp
+  src/temporal/taxonomy.hpp
 )
 
 target_include_directories(temporal_classifier PRIVATE
@@ -189,6 +192,7 @@ target_link_libraries(temporal_classifier PRIVATE
   ${OpenCV_LIBS}
   Threads::Threads
   spdlog::spdlog
+  yaml-cpp
 )
 if(ONNXRUNTIME_LIB)
   target_link_libraries(temporal_classifier PRIVATE ${ONNXRUNTIME_LIB})
