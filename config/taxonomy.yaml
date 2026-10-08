@@ -1,5 +1,6 @@
 # Hierarchical scene taxonomy (Level-1 → Level-2).
-# scene-router and temporal-classifier MUST stay aligned with this file.
+# Single source of truth: github.com/agentjetson/contract/domain/taxonomy.yaml
+# Keep this file in sync (or mount TAXONOMY_PATH at the contract path).
 # specialists listed here are gating hints, not hard requirements.
 
 version: 1

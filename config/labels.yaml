@@ -1,20 +1,28 @@
 # Map MoViNet (or heuristic) outputs → AgentJetson Level-2 labels.
-# Align with config/taxonomy.yaml (copied from contract/domain/taxonomy.yaml).
+# Level-2 ids MUST exist in config/taxonomy.yaml
+# (copy of contract/domain/taxonomy.yaml).
 
-version: "0.1"
+version: "1"
 
+# All L2 ids from the contract taxonomy (roadway + sidewalk + facility + unknown).
 level2_targets:
+  # roadway
   - driving
   - stopped
   - traffic_stop
   - congestion
   - crash
-  - accident
-  - obstruction
-  - parked
+  # sidewalk
+  - walking
+  - gathering
+  # facility
+  - entry
+  - queue
+  # unknown
+  - abstain
 
-# Example mapping once a real MoViNet / Kinetics-style label set is known:
-# kinetics_style:
+# Optional model-label → taxonomy L2 aliases (fill once Kinetics/MoViNet labels known):
+# model_aliases:
 #   "driving car": driving
 #   "waiting in line": stopped
 #   "getting out of car": traffic_stop
