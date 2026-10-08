@@ -6,6 +6,7 @@
 //   1. --source <path|device>       Standalone test (opens VideoCapture itself)
 //   2. --network-path <frame_addr>  Subscribe to camera-connector FrameService
 //                                   (gRPC stream of FrameEnvelope)
+//                                   and publish refined SceneResult via IngestScene
 
 #include <atomic>
 #include <chrono>
@@ -14,6 +15,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <opencv2/imgcodecs.hpp>
@@ -22,9 +24,12 @@
 #include <spdlog/spdlog.h>
 
 #include <grpcpp/grpcpp.h>
+#include <google/protobuf/timestamp.pb.h>
 
 #include "capture/v1/frame.pb.h"
 #include "capture/v1/frame_service.grpc.pb.h"
+#include "ingest/v1/ingest_service.grpc.pb.h"
+#include "scene/v1/scene.pb.h"
 
 #include "common/env.hpp"
 #include "temporal/movinet.hpp"
@@ -62,6 +67,116 @@ cv::Mat decode_frame(const capture::v1::FrameEnvelope& env) {
   return {};
 }
 
+// Minimal L2 → specialists map (aligned with contract/domain/taxonomy.yaml).
+std::vector<std::string> specialists_for(const std::string& level2) {
+  static const std::unordered_map<std::string, std::vector<std::string>> k = {
+      {"driving", {"alpr", "speed", "vehicle_attr"}},
+      {"stopped", {"alpr", "vehicle_attr"}},
+      {"traffic_stop", {"alpr", "officer", "vehicle_attr"}},
+      {"congestion", {"alpr", "speed"}},
+      {"crash", {"alpr", "damage"}},
+      {"accident", {"alpr", "damage"}},
+      {"obstruction", {"alpr"}},
+      {"parked", {"alpr", "vehicle_attr"}},
+  };
+  auto it = k.find(level2);
+  if (it != k.end()) return it->second;
+  return {};
+}
+
+// Default Level-1 for roadway temporal refinements.
+std::string level1_for(const std::string& level2) {
+  static const std::unordered_map<std::string, std::string> k = {
+      {"driving", "roadway"},
+      {"stopped", "roadway"},
+      {"traffic_stop", "roadway"},
+      {"congestion", "roadway"},
+      {"crash", "roadway"},
+      {"accident", "roadway"},
+      {"obstruction", "roadway"},
+      {"parked", "roadway"},
+      {"walking", "sidewalk"},
+      {"gathering", "sidewalk"},
+  };
+  auto it = k.find(level2);
+  return it != k.end() ? it->second : "unknown";
+}
+
+void fill_timestamp(google::protobuf::Timestamp* ts,
+                    const google::protobuf::Timestamp& from) {
+  if (from.seconds() != 0 || from.nanos() != 0) {
+    *ts = from;
+    return;
+  }
+  const auto now = std::chrono::system_clock::now();
+  const auto secs =
+      std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+  const auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      now.time_since_epoch() - secs);
+  ts->set_seconds(secs.count());
+  ts->set_nanos(static_cast<int32_t>(nanos.count()));
+}
+
+scene::v1::SceneResult make_scene_result(
+    const temporal::TemporalDecision& d, int64_t frame_id,
+    const std::string& source,
+    const google::protobuf::Timestamp& frame_ts) {
+  scene::v1::SceneResult sr;
+  sr.set_frame_id(frame_id);
+  fill_timestamp(sr.mutable_timestamp(), frame_ts);
+  sr.set_source(source);
+  sr.set_level1(level1_for(d.level2));
+  sr.set_level2(d.level2);
+  sr.set_level1_confidence(d.confidence);
+  sr.set_level2_confidence(d.confidence);
+  for (const auto& s : specialists_for(d.level2)) {
+    sr.add_specialists(s);
+  }
+  sr.set_backend(d.backend.empty() ? "movinet" : d.backend);
+  sr.set_temporal_requested(false);  // refined — no further temporal hand-off
+  sr.set_notes(d.notes);
+  return sr;
+}
+
+// Thin client for core IngestService.IngestScene. Optional: no-op when addr empty.
+class SceneIngestClient {
+ public:
+  explicit SceneIngestClient(const std::string& addr) {
+    if (addr.empty()) return;
+    channel_ = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+    stub_ = ingest::v1::IngestService::NewStub(channel_);
+    spdlog::info("SceneIngestClient → {}", addr);
+  }
+
+  bool enabled() const { return static_cast<bool>(stub_); }
+
+  bool publish(const scene::v1::SceneResult& scene) {
+    if (!stub_) return false;
+    ingest::v1::IngestSceneRequest req;
+    *req.mutable_scene() = scene;
+    ingest::v1::IngestSceneResponse resp;
+    grpc::ClientContext ctx;
+    // Short deadline so a down ingest does not stall the frame loop.
+    ctx.set_deadline(std::chrono::system_clock::now() +
+                     std::chrono::milliseconds(500));
+    auto status = stub_->IngestScene(&ctx, req, &resp);
+    if (!status.ok()) {
+      spdlog::warn("IngestScene failed: {}", status.error_message());
+      return false;
+    }
+    if (!resp.accepted()) {
+      spdlog::warn("IngestScene rejected: {}",
+                   resp.has_error() ? resp.error().message() : "unknown");
+      return false;
+    }
+    return true;
+  }
+
+ private:
+  std::shared_ptr<grpc::Channel> channel_;
+  std::unique_ptr<ingest::v1::IngestService::Stub> stub_;
+};
+
 void print_usage(const char* argv0) {
   std::cerr
       << "Usage:\n"
@@ -74,7 +189,8 @@ void print_usage(const char* argv0) {
       << "\n"
       << "Environment:\n"
       << "  ORT_DEVICE  MOVINET_MODEL  CLIP_FRAMES  CLIP_FPS\n"
-      << "  FRAME_GRPC_ADDR  FRAME_CAMERA_ID  FRAME_ENCODING (jpeg|raw_bgr)\n";
+      << "  FRAME_GRPC_ADDR  FRAME_CAMERA_ID  FRAME_ENCODING (jpeg|raw_bgr)\n"
+      << "  INGEST_ADDR       core ingest gRPC (e.g. localhost:50052); empty = log only\n";
 }
 
 }  // namespace
@@ -112,6 +228,8 @@ int main(int argc, char** argv) {
   const auto period =
       std::chrono::milliseconds(1000 / std::max(1, target_fps));
 
+  SceneIngestClient ingest(edge::getenv_or("INGEST_ADDR", ""));
+
   // ── Mode: --network-path (gRPC FrameService client) ─────────────────────
   if (mode == "--network-path") {
     const std::string frame_addr =
@@ -123,8 +241,9 @@ int main(int argc, char** argv) {
 
     spdlog::info(
         "temporal-classifier [network-path] frame_addr={} model={} "
-        "clip_frames={} fps≈{}",
-        frame_addr, model, cfg.clip_frames, target_fps);
+        "clip_frames={} fps≈{} ingest={}",
+        frame_addr, model, cfg.clip_frames, target_fps,
+        ingest.enabled() ? edge::getenv_or("INGEST_ADDR", "") : "(log-only)");
 
     // Reconnect loop so a camera-connector restart does not kill us.
     while (g_running) {
@@ -162,9 +281,19 @@ int main(int argc, char** argv) {
 
         ++frames;
         if (auto d = clf.push(frame)) {
+          auto sr = make_scene_result(*d, env.frame_id(), env.source(),
+                                      env.timestamp());
           spdlog::info(
-              "clip@frame={} id={}  L2={} ({:.2f})  notes={}", frames,
-              env.frame_id(), d->level2, d->confidence, d->notes);
+              "clip@frame={} id={}  L1={} L2={} ({:.2f})  specialists={}  "
+              "notes={}",
+              frames, env.frame_id(), sr.level1(), sr.level2(),
+              sr.level2_confidence(), sr.specialists_size(), d->notes);
+
+          if (ingest.enabled()) {
+            if (ingest.publish(sr)) {
+              spdlog::debug("IngestScene ok frame_id={}", env.frame_id());
+            }
+          }
         }
 
         if (frames % 30 == 0) {
@@ -201,8 +330,10 @@ int main(int argc, char** argv) {
   }
 
   spdlog::info(
-      "temporal-classifier [source] source={} model={} clip_frames={} fps≈{}",
-      source, model, cfg.clip_frames, target_fps);
+      "temporal-classifier [source] source={} model={} clip_frames={} fps≈{} "
+      "ingest={}",
+      source, model, cfg.clip_frames, target_fps,
+      ingest.enabled() ? edge::getenv_or("INGEST_ADDR", "") : "(log-only)");
 
   cv::Mat frame;
   int idx = 0;
@@ -218,8 +349,13 @@ int main(int argc, char** argv) {
     ++idx;
 
     if (auto d = clf.push(frame)) {
-      spdlog::info("clip@frame={}  L2={} ({:.2f})  notes={}", idx, d->level2,
-                   d->confidence, d->notes);
+      google::protobuf::Timestamp empty_ts;
+      auto sr = make_scene_result(*d, idx, source, empty_ts);
+      spdlog::info("clip@frame={}  L1={} L2={} ({:.2f})  notes={}", idx,
+                   sr.level1(), sr.level2(), sr.level2_confidence(), d->notes);
+      if (ingest.enabled()) {
+        ingest.publish(sr);
+      }
     }
 
     auto elapsed = std::chrono::steady_clock::now() - t0;

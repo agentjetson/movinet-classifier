@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package scene.v1;
+
+option cc_enable_arenas = true;
+option go_package = "github.com/agentjetson/contract/gen/go/scene/v1;scenev1";
+
+import "google/protobuf/timestamp.proto";
+
+// SceneResult is the stable output of scene-router (and of temporal-classifier
+// when it refines an ambiguous decision).
+//
+// Subject: cv.scene.<level1>  and  cv.scene.result (final / refined)
+// Durable table: cv_scenes
+//
+// Downstream (object-classifier gating, aggregator, specialists) consume this;
+// they do not care which vision backbone produced it.
+//
+// temporal-classifier does NOT invent a second message type: it republishes
+// SceneResult with backend = "movinet" (or similar) and temporal_requested = false.
+//
+// frame_id is int64 to match ObjectEnvelope / Alert / CapabilityResult.
+message SceneResult {
+  int64  frame_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  string source = 3;               // camera id / file / rtsp
+
+  string level1 = 4;               // e.g. roadway
+  string level2 = 5;               // e.g. traffic_stop
+  float  level1_confidence = 6;
+  float  level2_confidence = 7;
+
+  repeated string specialists = 8; // suggested capabilities to activate
+  map<string, float> scores = 9;   // optional full prompt / class scores
+
+  string backend = 10;             // "siglip2" | "dinov3" | "hybrid" | "movinet"
+  bool   temporal_requested = 11;  // true → hand to temporal-classifier
+  string notes = 12;
+}

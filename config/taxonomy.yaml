@@ -1,0 +1,33 @@
+# Hierarchical scene taxonomy (Level-1 → Level-2).
+# scene-router and temporal-classifier MUST stay aligned with this file.
+# specialists listed here are gating hints, not hard requirements.
+
+version: 1
+
+levels:
+  roadway:
+    description: Road / traffic camera, vehicle-primary
+    specialists: [alpr, speed, vehicle_attr]
+    l2:
+      driving: { description: Vehicles in motion }
+      stopped: { description: Vehicles stopped, not a formal stop }
+      traffic_stop: { description: Officer-involved roadside stop, temporal often requested }
+      congestion: { description: Queueing / jam }
+      crash: { description: Collision / debris }
+  sidewalk:
+    description: Pedestrian realm
+    specialists: [person_attr]
+    l2:
+      walking: { description: Pedestrians in motion }
+      gathering: { description: Crowd / loitering }
+  facility:
+    description: Building interior / lobby / gate
+    specialists: [face, person_attr]
+    l2:
+      entry: { description: Door / gate }
+      queue: { description: Line }
+  unknown:
+    description: Router abstains; no specialist gating
+    specialists: []
+    l2:
+      abstain: { description: Below confidence floor }

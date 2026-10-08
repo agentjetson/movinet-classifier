@@ -36,8 +36,10 @@ ENV LD_LIBRARY_PATH=/opt/opencv/lib:/opt/onnxruntime/lib \
     CLIP_FRAMES=16 \
     CLIP_FPS=5 \
     NATS_URL=nats://nats:4222 \
-    FRAME_GRPC_ADDR=localhost:50060 \
-    FRAME_ENCODING=jpeg
+    FRAME_GRPC_ADDR=host.docker.internal:50060 \
+    FRAME_ENCODING=jpeg \
+    INGEST_ADDR=host.docker.internal:50052
 
 WORKDIR /app
-CMD ["/app/temporal_classifier", "--source", "/app/sample.mp4"]
+# Default: network-path (override with --source for offline demos)
+CMD ["/app/temporal_classifier", "--network-path", ""]

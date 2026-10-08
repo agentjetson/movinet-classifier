@@ -109,15 +109,20 @@ if(_PROTO_INCLUDE_PATH)
 endif()
 
 # ---------------------------------------------------------------------------
-# Protos (FrameService client for --network-path)
+# Protos — FrameService client + IngestScene publisher
 # ---------------------------------------------------------------------------
 set(PROTO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/proto)
 set(PROTO_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
 
 set(PROTO_FILES
+  ${PROTO_ROOT}/common/v1/error.proto
   ${PROTO_ROOT}/capture/v1/frame.proto
   ${PROTO_ROOT}/capture/v1/frame_service.proto
+  ${PROTO_ROOT}/scene/v1/scene.proto
+  ${PROTO_ROOT}/detection/v1/detection.proto
+  ${PROTO_ROOT}/audio/v1/transcript.proto
+  ${PROTO_ROOT}/ingest/v1/ingest_service.proto
 )
 
 set(PROTO_SRCS)

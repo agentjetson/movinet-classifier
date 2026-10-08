@@ -1,10 +1,16 @@
-# Local edge stack for object-classifier.
-# Talks to agentjetson/core ingest (gRPC :50052) when that stack is up.
+# Local edge stack for temporal-classifier.
+# Network path: subscribe to camera-connector FrameService and publish
+# refined SceneResult to core ingest (IngestScene).
 #
-# Usage:
+# Usage (network-path against a live FrameService):
+#   FRAME_GRPC_ADDR=host.docker.internal:50060 \
+#   INGEST_ADDR=host.docker.internal:50052 \
 #   docker compose up --build
-#   # or against host models:
-#   MODEL_PATH=./models/rfdetr.onnx SOURCE=./data/sample.mp4 docker compose up
+#
+# Usage (standalone file demo):
+#   SOURCE=./data/sample.mp4 MODEL=./models/movinet_a0.onnx \
+#   docker compose run --rm temporal-classifier \
+#     --source /data/sample.mp4 /models/movinet_a0.onnx
 
 services:
   temporal-classifier:
@@ -13,16 +19,23 @@ services:
       dockerfile: docker/Dockerfile
     environment:
       INGEST_ADDR: ${INGEST_ADDR:-host.docker.internal:50052}
+      FRAME_GRPC_ADDR: ${FRAME_GRPC_ADDR:-host.docker.internal:50060}
+      FRAME_ENCODING: ${FRAME_ENCODING:-jpeg}
+      FRAME_CAMERA_ID: ${FRAME_CAMERA_ID:-}
+      ORT_DEVICE: ${ORT_DEVICE:-cpu}
+      MOVINET_MODEL: ${MOVINET_MODEL:-/app/models/movinet_a0.onnx}
+      CLIP_FRAMES: ${CLIP_FRAMES:-16}
+      CLIP_FPS: ${CLIP_FPS:-5}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_INSECURE: "true"
     volumes:
-      - ${MODEL_DIR:-./models}:/models:ro
+      - ${MODEL_DIR:-./models}:/app/models:ro
       - ${DATA_DIR:-./data}:/data:ro
-    # Example: in-process capture + classify
+    # Default: network-path (camera-connector FrameService → IngestScene)
     command:
-      - "--in-process"
-      - "${SOURCE:-/data/sample.mp4}"
-      - "${MODEL:-/models/model.onnx}"
+      - "--network-path"
+      - "${FRAME_GRPC_ADDR:-host.docker.internal:50060}"
+      - "${MOVINET_MODEL:-/app/models/movinet_a0.onnx}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
