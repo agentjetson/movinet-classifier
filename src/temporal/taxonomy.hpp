@@ -6,7 +6,7 @@
 
 namespace temporal {
 
-// Contract taxonomy (agentjetson/contract/domain/taxonomy.yaml):
+// Contract taxonomy (agentjetson/core/domain/taxonomy.yaml):
 //   levels.
 //     <l1>.specialists: [...]
 //     <l1>.l2.<l2_id>: { description: ... }

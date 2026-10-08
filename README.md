@@ -13,7 +13,7 @@ Lightweight streaming temporal / action classifier for **AgentJetson**.
 ## Taxonomy (single source of truth)
 
 Level-1 / Level-2 labels and specialist gating come from
-**[contract/domain/taxonomy.yaml](https://github.com/agentjetson/contract/blob/main/domain/taxonomy.yaml)**.
+**[contract/domain/taxonomy.yaml](https://github.com/agentjetson/core/blob/main/domain/taxonomy.yaml)**.
 
 | Path | Role |
 |------|------|
