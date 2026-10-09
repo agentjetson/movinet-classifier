@@ -39,7 +39,7 @@ Precompute text embeddings offline so runtime is **vision only**.
 - **A3** — +accuracy, ~20× FLOPs vs A0; fine on AGX alone, less ideal when RF-DETR + SigLIP share the GPU.
 - Newer sub-1M RGB action nets (X3D-style) can win on NTU/Jetson Nano benchmarks, but **Kinetics zero-shot + taxonomy mapping + mature ONNX** are weaker than MoViNet’s ecosystem.
 
-TODO: fine-tune a small RGB model on our L2 labels.
+[A Short Note about Kinetics-600](https://ar5iv.labs.arxiv.org/html/1808.01340)
 
 ### Runtime rule (more important than model choice)
 
@@ -70,7 +70,13 @@ That fits AGX comfortably if detection is TRT and scene/temporal are sparse.
 |----------|--------|
 | SOTA **detection** ONNX→TRT on Orin? | **RF-DETR-N/S** (your stack) or YOLO11/26-n if pure speed |
 | SOTA **zero-shot scene** small ONNX? | **SigLIP 2 Base 224** (upgrade So400m only if needed) |
-| SOTA **temporal** ONNX on Orin? | No single winner; **MoViNet-A0/A1** still the pragmatic streaming default once exported |
-| Absolute research SOTA? | No — those are heavier transformers / VLMs that blow the multi-model budget |
+| SOTA **temporal** ONNX on Orin? | No single winner; **MoViNet-A0/A1** still pragmatic streaming default once exported |
 
-**Ship:** RF-DETR-N TRT + SigLIP 2 Base TRT + MoViNet-A0 when ONNX exists. Treat A3 / So400m as AGX-only upgrades after you measure concurrent latency with specialists on.
+## MoViNet (eg A0/A1/A2) 
+is an efficient video action-recognition model designed for real-time streaming with bounded memory and low-latency inference. Unlike foundation models such as InternVideo2 and VideoMAE V2, it prioritizes lightweight, deployable inference for specific action-recognition tasks, making it well suited for resource-constrained edge environments, though generally less capable in broad video understanding.
+
+## VideoMAE V2 
+is a self-supervised video encoder that learns spatiotemporal features through dual masking and high-ratio masked reconstruction (~90%). It efficiently captures appearance cues and motion dynamics, making it well suited for embeddings, retrieval, and search without video-text supervision. However, its limited semantic and language alignment makes it less suitable for video QA and dialogue than multimodal models like InternVideo2.
+
+## InternVideo2-CLIP-S 
+InternVideo2-CLIP-S is a multimodal foundation model combining masked video modeling, contrastive learning, and next-token prediction in a three-stage training framework. Leveraging InternVL-6B for semantic guidance and VideoMAE V2 for motion awareness, it delivers strong performance across 60+ video and audio tasks, including long-context understanding, video-text retrieval, QA, and dialogue.
