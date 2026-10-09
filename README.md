@@ -44,6 +44,37 @@ scene-router  →  temporal_requested=true
 
 ---
 
+## Models
+
+| Role | Path / artifact | Notes |
+|------|-----------------|-------|
+| MoViNet-A0 Stream (preferred) | `models/movinet_a0_stream/` | Official TF checkpoint from Model Garden |
+| MoViNet-A0 Base | `models/movinet_a0_base/` | Clip-based (non-streaming) |
+| MoViNet-A1 Stream / Base | `models/movinet_a1_{stream,base}/` | Larger sibling |
+| ONNX runtime path | `models/movinet_a0.onnx` | **Not published by Google** — export TODO; binary falls back to motion heuristic |
+
+### Download MoViNet (official checkpoints)
+
+```bash
+# A0 Stream (~15 MB archive) — recommended for edge temporal
+./scripts/download_movinet.sh
+
+# A0 Base (clip)
+./scripts/download_movinet.sh --base
+
+# A1 Stream
+./scripts/download_movinet.sh --a1
+
+# Everything
+./scripts/download_movinet.sh --all
+```
+
+Weights come from [TF Model Garden / MoViNet](https://github.com/tensorflow/models/tree/master/official/projects/movinet)
+(`storage.googleapis.com/tf_model_garden/vision/movinet/`, Apache-2.0).  
+MoViNet is the 2021 Kinetics-600 family — still the official Google release; there is no newer MoViNet line. There is also **no canonical public ONNX**; `MOVINET_MODEL=models/movinet_a0.onnx` remains the intended runtime path once exported.
+
+---
+
 ## Environment
 
 ```bash
