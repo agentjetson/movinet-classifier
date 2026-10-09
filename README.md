@@ -1,10 +1,10 @@
-# temporal-classifier
+# movinet-classifier (temporal-classifier) A0/A1
 
-Lightweight streaming temporal / action classifier for **AgentJetson**.
+Lightweight streaming temporal / action classifier for edge devices running **AgentJetson**.
 
 **Role:** resolve ambiguous scene decisions from [scene-router](https://github.com/agentjetson/scene-router). Single-frame SigLIP / DINO cannot reliably distinguish driving vs stopped, traffic stop vs ordinary roadside stop, or short-term motion concepts.
 
-**Primary backend:** MoViNet-A0 / A1 (ONNX Runtime) with a motion heuristic fallback.
+**Primary backend:** MoViNet-A0 / A1 (ONNX Runtime) with motion heuristic fallback.
 
 **Output:** refined `scene.v1.SceneResult` (`backend=movinet`, `temporal_requested=false`) via `IngestService.IngestScene` → `cv.scene.*`.
 
